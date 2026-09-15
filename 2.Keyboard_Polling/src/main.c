@@ -76,29 +76,29 @@ void main(void) {
     static int ext = 0;
     // Loop in place forever
     while (1) {
-	// poll keyboard status 
-	while((inportb(KBD_PORT_STAT) & 0x01) == 0){	
-	}
-	// read keyboard data
-	unsigned char b = inportb(KBD_PORT_DATA);
-	if (b == 0xE0) {
-		ext = 1;
-		continue;
-	}
-	unsigned char c = b & 0x7F;
-
-	// translate keyboard scancode to ASCII code	
-	unsigned char token = KEY_NULL;
-	if (ext) {
-	    token = keyboard_map_ext[c];
-    	    ext = 0;	    
-	} else {
-	    token = (c < sizeof(keyboard_map_primary))
-	    	? keyboard_map_primary[c] : KEY_NULL;	    
-	}
-	printf("keyboard scancode: %d, 0x%x, ascii code: %c\n", c, c, token);
+		// poll keyboard status 
+		while((inportb(KBD_PORT_STAT) & 0x01) == 0){	
+		}
+		// read keyboard data
+		unsigned char b = inportb(KBD_PORT_DATA);
+		if (b == 0xE0) {
+			ext = 1;
+			continue;
+		}
+		unsigned char c = b & 0x7F;
+	
+		// translate keyboard scancode to ASCII code	
+		unsigned char token = KEY_NULL;
+		if (ext) {
+		    token = keyboard_map_ext[c];
+	    	    ext = 0;	    
+		} else {
+		    token = (c < sizeof(keyboard_map_primary))
+		    	? keyboard_map_primary[c] : KEY_NULL;	    
+		}
+		printf("keyboard scancode: %d, 0x%x, ascii code: %c\n", c, c, token);
         // Print the character on the VGA screen 
-	*(unsigned short*)0xB8000 = 0x0700 + (unsigned int)c;       
-	*(unsigned short*)0xB8002 = 0x0700 + (unsigned int)token;	
+		*(unsigned short*)0xB8000 = 0x0700 + (unsigned int)c;       
+		*(unsigned short*)0xB8002 = 0x0700 + (unsigned int)token;	
     }
 }
