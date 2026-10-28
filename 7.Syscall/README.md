@@ -1,1 +1,233 @@
-# System Calls (Syscall)\n\n## Overview\nThis module demonstrates how system calls work. A system call is the primary mechanism by which user programs request services from the kernel (like I/O, memory allocation, etc.). The module shows how to:\n- Transition from user mode to kernel mode\n- Define and implement system call handlers\n- Use INT instruction to invoke system calls\n- Return from system calls with proper privilege restoration\n\n## Learning Objectives\n- Understand system calls as the user-kernel interface\n- Learn how to implement system call dispatch\n- See how privilege levels are managed\n- Understand mode transitions (user ↔ kernel)\n- Practice mixing user and kernel code\n- Learn about system call conventions (how parameters are passed)\n\n## Build and Run\n```bash\nmake\nspede-target   # Separate terminal\nspede-run -d\n```\n\n## What is a System Call?\n\nA system call is a request from a user program to the kernel:\n- User code cannot directly access hardware\n- User code cannot directly modify other processes' memory\n- User code needs kernel to provide these services\n- System calls are the controlled interface\n\n### Why System Calls?\n1. **Protection**: Kernel validates all requests\n2. **Isolation**: Prevents processes from interfering\n3. **Resource management**: Kernel allocates and tracks resources\n4. **Security**: Kernel enforces access control\n\n## How System Calls Work\n\n### Traditional Approach (Intel)\n1. User program loads parameters into registers\n2. User program loads system call number into EAX\n3. User program executes `INT 0x80` instruction\n4. Hardware generates interrupt\n5. CPU switches to kernel mode\n6. Kernel looks up system call handler by number\n7. Kernel executes the handler\n8. Kernel stores return value in EAX\n9. Kernel executes IRET to return to user code\n10. CPU switches back to user mode\n\n### Stack Layout During System Call\n```\nBefore INT:\n  EAX = system call number\n  EBX, ECX, EDX, ESI, EDI = parameters\n  ESP = user stack pointer\n\nAfter INT (kernel handler):\n  Stack has: EFLAGS, CS, EIP (pushed by hardware)\n  ESP = kernel stack pointer (switched automatically)\n  \nAfter IRET:\n  Back to user mode\n  EAX = return value\n  User stack restored\n```\n\n## System Call Numbers\n\nCommon system calls (Linux on x86):\n- 1: exit\n- 3: read\n- 4: write\n- 11: execve\n- 33: dup2\n- 37: kill\n- 45: brk (set heap limit)\n- 54: ioctl\n\nIn this example, custom system call numbers are defined for teaching purposes.\n\n## Implementation\n\n### System Call Handler\n```c\nvoid syscall_handler(unsigned int syscall_num, \n                     unsigned int param1,\n                     unsigned int param2,\n                     unsigned int param3) {\n    switch(syscall_num) {\n        case 1: // exit\n            terminate_process();\n            break;\n        case 2: // read\n            return read_from_device(param1, param2, param3);\n            break;\n        // ... more handlers\n    }\n}\n```\n\n### INT Handler Setup\n```c\n// Register syscall handler\nfill_gate(&IDT_p[0x80], (int)syscall_entry, get_cs(), \n          ACC_INTR_GATE, 3);  // Privilege 3 allows user code\n```\n\nNote: Most interrupts are privilege 0 (kernel only). System calls are usually privilege 3 (user can execute).\n\n## System Call ABI (Application Binary Interface)\n\n### Parameter Passing (Typical Convention)\n```\nParameter 1: EBX\nParameter 2: ECX\nParameter 3: EDX\nParameter 4: ESI\nParameter 5: EDI\nParameter 6: EBP\nReturn value: EAX\nError code: Also in EAX (negative indicates error)\n```\n\n## User vs. Kernel Mode\n\n### User Mode (Privilege Level 3)\n- Cannot execute privileged instructions (CLI, STI, LGDT, etc.)\n- Cannot access kernel memory\n- Cannot directly access I/O ports\n- Cannot modify page tables\n- Cannot change privilege level\n- Must use system calls to request services\n\n### Kernel Mode (Privilege Level 0)\n- Can execute all instructions\n- Can access all memory\n- Can access I/O ports\n- Can modify page tables\n- Can change privilege level\n- Provides services to user mode\n\n## Transitions Between Modes\n\n### User → Kernel\n- INT instruction (system call)\n- Interrupt or exception occurrence\n- Hardware automatically:\n  - Saves user state (CS:EIP, EFLAGS)\n  - Switches to kernel stack\n  - Switches to kernel mode (CPL=0)\n  - Jumps to handler\n\n### Kernel → User\n- IRET instruction\n- Hardware automatically:\n  - Restores user state from stack\n  - Switches to user stack\n  - Switches to user mode (CPL=3)\n  - Jumps to user code\n\n## System Call Optimization\n\n### Fast System Calls (SYSENTER/SYSEXIT)\nModern x86 provides faster system call mechanism:\n- Traditional INT: ~1000+ CPU cycles\n- SYSENTER/SYSEXIT: ~100 CPU cycles\n- Used by Linux, Windows\n- Requires special register setup\n\n## Common System Calls on Real Systems\n\n**File I/O:**\n- open, close, read, write, seek, stat\n\n**Process Management:**\n- fork, exec, exit, wait, kill, getpid\n\n**Memory Management:**\n- brk, mmap, munmap, mprotect\n\n**Signal Handling:**\n- signal, sigaction, sigprocmask\n\n**IPC:**\n- pipe, socket, sendto, recvfrom, select\n\n## Error Handling\n\nSystem calls typically return:\n- Negative values for errors (e.g., -1 means error)\n- Positive or 0 for success\n- Error codes stored separately (errno in C libraries)\n\n## GDB Debugging System Calls\n\n```bash\nspede-run -d\n(gdb) b syscall_entry       # Breakpoint at entry\n(gdb) b syscall_handler     # Breakpoint at C handler\n(gdb) print $eax            # System call number\n(gdb) print $ebx/$ecx/$edx  # Parameters\n```\n\n## Progression\n- **Before**: `6.MemPolicy` - Memory management\n- **Next**: `8.UserProcess` - User-mode processes\n- **After**: Device drivers and advanced I/O\n\n## Why System Calls Matter\n\nSystem calls are:\n- **The fundamental OS interface**: Every useful program needs them\n- **Security boundary**: Where OS validates requests\n- **Performance critical**: Heavily optimized in real systems\n- **Portable**: POSIX standardizes many system calls\n- **Complex**: Requires careful privilege management\n\n## Advanced Topics\n\n### Vdso (Virtual Dynamic Shared Object)\n- Some system calls implemented in user space\n- No mode switch overhead\n- Examples: gettimeofday, getcpuclockid\n\n### Seccomp (Secure Computing Mode)\n- Restrict available system calls\n- Used for sandboxing\n- Filter syscalls based on security policy\n\n### System Call Tracing\n- strace tool shows all system calls\n- Useful for debugging\n- Performance analysis\n\n---\n\nSystem calls are the bridge between user programs and the OS kernel. Understanding them is essential for systems programming!"
+# System Calls (Syscall)
+
+## Overview
+This module demonstrates how system calls work. A system call is the primary mechanism by which user programs request services from the kernel (like I/O, memory allocation, etc.). The module shows how to:
+- Transition from user mode to kernel mode
+- Define and implement system call handlers
+- Use INT instruction to invoke system calls
+- Return from system calls with proper privilege restoration
+
+## Learning Objectives
+- Understand system calls as the user-kernel interface
+- Learn how to implement system call dispatch
+- See how privilege levels are managed
+- Understand mode transitions (user ↔ kernel)
+- Practice mixing user and kernel code
+- Learn about system call conventions (how parameters are passed)
+
+## Build and Run
+```bash
+make
+spede-target   # Separate terminal
+spede-run -d
+```
+
+## What is a System Call?
+A system call is a request from a user program to the kernel:
+- User code cannot directly access hardware
+- User code cannot directly modify other processes' memory
+- User code needs kernel to provide these services
+- System calls are the controlled interface
+
+### Why System Calls?
+1. **Protection**: Kernel validates all requests
+2. **Isolation**: Prevents processes from interfering
+3. **Resource management**: Kernel allocates and tracks resources
+4. **Security**: Kernel enforces access control
+
+## How System Calls Work
+
+### Traditional Approach (Intel)
+1. User program loads parameters into registers
+2. User program loads system call number into EAX
+3. User program executes `INT 0x80` instruction
+4. Hardware generates interrupt
+5. CPU switches to kernel mode
+6. Kernel looks up system call handler by number
+7. Kernel executes the handler
+8. Kernel stores return value in EAX
+9. Kernel executes IRET to return to user code
+10. CPU switches back to user mode
+
+### Stack Layout During System Call
+```text
+Before INT:
+  EAX = system call number
+  EBX, ECX, EDX, ESI, EDI = parameters
+  ESP = user stack pointer
+
+After INT (kernel handler):
+  Stack has: EFLAGS, CS, EIP (pushed by hardware)
+  ESP = kernel stack pointer (switched automatically)
+  
+After IRET:
+  Back to user mode
+  EAX = return value
+  User stack restored
+```
+
+## System Call Numbers
+Common system calls (Linux on x86):
+- 1: exit
+- 3: read
+- 4: write
+- 11: execve
+- 33: dup2
+- 37: kill
+- 45: brk (set heap limit)
+- 54: ioctl
+
+In this example, custom system call numbers are defined for teaching purposes.
+
+## Implementation
+
+### System Call Handler
+```c
+void syscall_handler(unsigned int syscall_num, unsigned int param1,
+                     unsigned int param2, unsigned int param3) {
+   switch(syscall_num) {
+        case 1: // exit
+            terminate_process();
+            break;
+        case 2: // read
+            return read_from_device(param1, param2, param3);
+            break; 
+        // ... more handlers
+   }
+}
+```
+
+### INT Handler Setup
+```c
+// Register syscall handler
+fill_gate(&IDT_p[0x80], (int)syscall_entry, get_cs(), ACC_INTR_GATE, 3);  // Privilege 3 allows user code
+```
+*Note: Most interrupts are privilege 0 (kernel only). System calls are usually privilege 3 (user can execute).*
+
+## System Call ABI (Application Binary Interface)
+
+### Parameter Passing (Typical Convention)
+```text
+Parameter 1: EBX
+Parameter 2: ECX
+Parameter 3: EDX
+Parameter 4: ESI
+Parameter 5: EDI
+Parameter 6: EBP
+Return value: EAX
+Error code: Also in EAX (negative indicates error)
+```
+
+## User vs. Kernel Mode
+
+### User Mode (Privilege Level 3)
+- Cannot execute privileged instructions (CLI, STI, LGDT, etc.)
+- Cannot access kernel memory
+- Cannot directly access I/O ports
+- Cannot modify page tables
+- Cannot change privilege level
+- Must use system calls to request services
+
+### Kernel Mode (Privilege Level 0)
+- Can execute all instructions
+- Can access all memory
+- Can access I/O ports
+- Can modify page tables
+- Can change privilege level
+- Provides services to user mode
+
+## Transitions Between Modes
+
+### User → Kernel
+- INT instruction (system call)
+- Interrupt or exception occurrence
+- Hardware automatically:
+  - Saves user state (CS:EIP, EFLAGS)
+  - Switches to kernel stack
+  - Switches to kernel mode (CPL=0)
+  - Jumps to handler
+
+### Kernel → User
+- IRET instruction
+- Hardware automatically:
+  - Restores user state from stack
+  - Switches to user stack
+  - Switches to user mode (CPL=3)
+  - Jumps to user code
+
+## System Call Optimization
+
+### Fast System Calls (SYSENTER/SYSEXIT)
+Modern x86 provides faster system call mechanism:
+- Traditional INT: ~1000+ CPU cycles
+- SYSENTER/SYSEXIT: ~100 CPU cycles
+- Used by Linux, Windows
+- Requires special register setup
+
+## Common System Calls on Real Systems
+
+**File I/O:**
+- open, close, read, write, seek, stat
+
+**Process Management:**
+- fork, exec, exit, wait, kill, getpid
+
+**Memory Management:**
+- brk, mmap, munmap, mprotect
+
+**Signal Handling:**
+- signal, sigaction, sigprocmask
+
+**IPC:**
+- pipe, socket, sendto, recvfrom, select
+
+## Error Handling
+
+System calls typically return:
+- Negative values for errors (e.g., -1 means error)
+- Positive or 0 for success
+- Error codes stored separately (errno in C libraries)
+
+## GDB Debugging System Calls
+
+```bash
+spede-run -d
+(gdb) b syscall_entry       # Breakpoint at entry
+(gdb) b syscall_handler     # Breakpoint at C handler
+(gdb) print $eax            # System call number
+(gdb) print $ebx/$ecx/$edx  # Parameters
+```
+
+## Progression
+- **Before**: `6.MemPolicy` - Memory management
+- **Next**: `8.UserProcess` - User-mode processes
+- **After**: Device drivers and advanced I/O
+
+## Why System Calls Matter
+
+System calls are:
+- **The fundamental OS interface**: Every useful program needs them
+- **Security boundary**: Where OS validates requests
+- **Performance critical**: Heavily optimized in real systems
+- **Portable**: POSIX standardizes many system calls
+- **Complex**: Requires careful privilege management
+
+## Advanced Topics
+
+### Vdso (Virtual Dynamic Shared Object)
+- Some system calls implemented in user space
+- No mode switch overhead
+- Examples: gettimeofday, getcpuclockid
+
+### Seccomp (Secure Computing Mode)
+- Restrict available system calls
+- Used for sandboxing
+- Filter syscalls based on security policy
+
+### System Call Tracing
+- `strace` tool shows all system calls
+- Useful for debugging
+- Performance analysis
+
+---
+System calls are the bridge between user programs and the OS kernel. Understanding them is essential for systems programming!
